@@ -1,24 +1,62 @@
-# Nusa Power IoT & AI System ????
+# Nusa Power: IoT & AI Energy Management System
 
-Selamat datang di repositori resmi **Nusa Power**, sistem cerdas penghemat baterai dan pemantauan energi surya (PLTS) berbasis Internet of Things (IoT) dan Artificial Intelligence (AI).
+Nusa Power is an intelligent Internet of Things (IoT) and Artificial Intelligence (AI) system designed for efficient solar power (PLTS) monitoring and battery energy management. The system autonomously manages relay states based on real-time solar panel power generation and battery State of Charge (SOC).
 
-## ?? Fitur Utama
-1. **Nusa AI Engine**: Algoritma cerdas di backend yang secara otomatis memutus atau menyambungkan relay (beban) berdasarkan sisa baterai (SOC) dan daya matahari yang masuk. 
-2. **Real-time Monitoring**: Memantau tegangan, arus baterai, dan daya panel surya secara *real-time* lewat protokol MQTT.
-3. **Mobile App (Flutter)**: Aplikasi Android/iOS untuk mengontrol alat secara manual maupun beralih ke mode otomatis (AI Mode).
-4. **Cloud Ready**: Backend diatur agar mudah di-deploy ke Vercel (untuk API) dan Render.com/Koyeb (untuk Background Worker MQTT).
+## Architecture Overview
 
-## ?? Struktur Direktori
-- ackend/: Berisi program Python (FastAPI & aiomqtt).
-  - main.py: REST API untuk aplikasi mobile (Login, Update Profil, Status Relay).
-  - mqtt_client.py: Worker AI yang berjalan 24/7 mendengarkan data sensor via MQTT dan mengambil keputusan otomatis.
-  - Dockerfile: Konfigurasi *container* untuk deployment backend ke cloud.
-- mobile/: Berisi source code aplikasi Android berbasis Flutter.
-  - lib/main.dart: Halaman utama aplikasi (UI).
+The system consists of two primary components:
+1. **Backend (Python)**: An AI engine and MQTT worker that listens to sensor telemetry via the MQTT protocol. It processes real-time data (battery voltage, solar current, grid status) and makes autonomous decisions to optimize energy usage.
+2. **Mobile Application (Flutter)**: A cross-platform mobile application providing users with real-time dashboards, manual relay overrides, and system settings configuration.
 
-## ?? Cara Deploy ke Render.com (Backend MQTT)
-1. Buat **Web Service** baru di Render.
-2. Hubungkan ke repositori ini.
-3. Pada bagian **Root Directory**, isi dengan: ackend
-4. Pilih **Free Tier**, lalu klik Deploy!
+## Directory Structure
 
+```text
+.
+├── backend/                  # Python API and AI Engine
+│   ├── main.py               # REST API endpoints (FastAPI)
+│   ├── mqtt_client.py        # MQTT listener & AI decision engine
+│   ├── database.py           # SQLite database configuration
+│   ├── models.py             # SQLAlchemy ORM models
+│   ├── requirements.txt      # Python dependencies
+│   └── Dockerfile            # Container configuration for cloud deployment
+│
+└── mobile/                   # Flutter Mobile Application
+    ├── lib/                  # Dart source code
+    │   └── main.dart         # Main UI and application logic
+    └── pubspec.yaml          # Flutter dependencies
+```
+
+## Deployment Guide (Backend)
+
+The backend is containerized and ready for deployment on platforms like Render, Vercel, or Koyeb. 
+
+### Deploying to Render.com
+1. Create a new **Web Service** on your Render dashboard.
+2. Connect this GitHub repository.
+3. In the configuration settings, set the **Root Directory** to: `backend`
+4. Ensure the **Language** is set to `Docker`.
+5. Click **Create Web Service**.
+
+### Environment Variables
+Ensure the following environment variables are configured in your deployment environment:
+* `MQTT_BROKER`: The address of your MQTT broker (e.g., `broker.emqx.io`).
+* `MQTT_PORT`: The port for the MQTT connection (default: `1883`).
+
+## Development Setup
+
+### Backend (Python 3.12+)
+```bash
+cd backend
+pip install -r requirements.txt
+python main.py
+```
+
+### Mobile App (Flutter)
+```bash
+cd mobile
+flutter pub get
+flutter run
+```
+
+---
+*Developed for Nusa Power IoT Systems.*
