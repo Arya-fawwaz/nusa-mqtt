@@ -629,6 +629,7 @@ class _DashboardScreenState extends State<DashboardScreen> {
   void initState() {
     super.initState();
     _fetchAiMode();
+    _checkUpdate();
   }
 
   Future<void> _fetchAiMode() async {
@@ -644,6 +645,84 @@ class _DashboardScreenState extends State<DashboardScreen> {
       }
     } catch (e) {
       print('Failed to fetch AI mode: $e');
+    }
+  }
+
+  Future<void> _checkUpdate() async {
+    try {
+      final res = await http.get(Uri.parse('https://backend-ashy-three-94.vercel.app/api/version'));
+      if (res.statusCode == 200) {
+        final data = json.decode(res.body);
+        if (data['version'] != '1.0.8') {
+          if (mounted) {
+            showDialog(
+              context: context,
+              barrierDismissible: false,
+              builder: (ctx) {
+                bool isDownloading = false;
+                double progress = 0.0;
+                return StatefulBuilder(
+                  builder: (context, setState) {
+                    return AlertDialog(
+                      title: const Text('Update Tersedia! 🚀', style: TextStyle(fontWeight: FontWeight.bold, color: Color(0xFF0F2E59))),
+                      content: isDownloading
+                          ? Column(
+                              mainAxisSize: MainAxisSize.min,
+                              children: [
+                                const Text('Mengunduh pembaruan...'),
+                                const SizedBox(height: 16),
+                                LinearProgressIndicator(value: progress < 0 ? null : progress),
+                                const SizedBox(height: 8),
+                                Text(progress < 0 ? 'Sedang mengunduh...' : '${(progress * 100).toStringAsFixed(1)}%'),
+                              ],
+                            )
+                          : Text('Versi baru ${data['version']} tersedia.\n\nFitur baru:\n${data['features']}'),
+                      actions: isDownloading
+                          ? []
+                          : [
+                              TextButton(onPressed: () => Navigator.pop(ctx), child: const Text('Nanti')),
+                              ElevatedButton(
+                                style: ElevatedButton.styleFrom(backgroundColor: const Color(0xFF0F2E59)),
+                                onPressed: () async {
+                                  setState(() {
+                                    isDownloading = true;
+                                  });
+                                  try {
+                                    final dir = await getExternalStorageDirectory();
+                                    final savePath = '${dir!.path}/app-update.apk';
+                                    await Dio().download(
+                                      data['url'],
+                                      savePath,
+                                      onReceiveProgress: (received, total) {
+                                        setState(() {
+                                          if (total != -1) progress = received / total;
+                                          else progress = -1.0;
+                                        });
+                                      },
+                                    );
+                                    Navigator.pop(ctx);
+                                    final result = await OpenFilex.open(savePath);
+                                    if (result.type != ResultType.done) {
+                                      ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text('Gagal membuka file APK: ${result.message}')));
+                                    }
+                                  } catch (e) {
+                                    Navigator.pop(ctx);
+                                    ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text('Download failed: $e')));
+                                  }
+                                },
+                                child: const Text('Update Sekarang', style: TextStyle(color: Colors.white)),
+                              ),
+                            ],
+                    );
+                  },
+                );
+              },
+            );
+          }
+        }
+      }
+    } catch (e) {
+      print('Failed to check update: $e');
     }
   }
   

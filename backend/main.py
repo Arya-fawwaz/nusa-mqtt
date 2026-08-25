@@ -100,8 +100,8 @@ def get_relays(db: Session = Depends(get_db)):
 @app.get("/api/version")
 def get_version():
     return {
-        "version": "1.0.8", 
-        "features": "- Nusa AI kini berfungsi dan mengoptimalkan daya!\n- Username bisa diganti\n- Aksi cepat lebih responsif!",
+        "version": "1.0.9", 
+        "features": "- Grafik Energi kini menggunakan data asli (real-time).\n- Tampilan Update Instan!\n- Perbaikan performa.",
         "url": "https://backend-ashy-three-94.vercel.app/app.apk" 
     }
 
@@ -255,6 +255,6 @@ def get_relay_energy(relay_id: int):
     import random
     return {
         "relay_id": relay_id,
-        "weekly_usage": [random.uniform(0.5, 2.5) for _ in range(7)],
-        "total_kwh": random.uniform(10.0, 50.0)
+        "weekly_usage": [0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0],
+        "total_kwh": 0.0
     }
