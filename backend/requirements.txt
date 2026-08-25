@@ -1,0 +1,10 @@
+fastapi
+uvicorn
+sqlalchemy
+psycopg2-binary
+asyncpg
+redis
+aiomqtt
+pydantic
+pydantic-settings
+aiohttp
