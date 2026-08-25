@@ -1,0 +1,33 @@
+name: Nusa AI MQTT Worker
+
+on:
+  push:
+    branches:
+      - main
+  schedule:
+    - cron: '0 */5 * * *'  # Restart every 5 hours to bypass 6-hour limit
+  workflow_dispatch:
+
+jobs:
+  run-ai-worker:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout Code
+        uses: actions/checkout@v3
+
+      - name: Set up Python
+        uses: actions/setup-python@v4
+        with:
+          python-version: '3.12'
+
+      - name: Install Dependencies
+        run: |
+          cd backend
+          pip install -r requirements.txt
+
+      - name: Run MQTT AI Engine
+        run: |
+          cd backend
+          # Run for 290 minutes (4.8 hours) then gracefully exit so the next cron takes over
+          timeout 17400 python mqtt_client.py || true
+
