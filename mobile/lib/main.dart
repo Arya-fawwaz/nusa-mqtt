@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import 'package:flutter_tts/flutter_tts.dart';
 import 'package:google_fonts/google_fonts.dart';
 import 'package:window_manager/window_manager.dart';
 import 'dart:convert';
@@ -34,10 +35,14 @@ const Map<String, Map<String, String>> translations = {
     'ai_engine': 'Mesin AI',
     'profile': 'Profil',
     'good_morning': 'Selamat Pagi',
+    'good_afternoon': 'Selamat Siang',
+    'good_evening': 'Selamat Sore',
+    'good_night': 'Selamat Malam',
     'search': 'Cari...',
     'smart_relays': 'Relai Cerdas',
     'view_all': 'lihat semua',
     'system_ok': 'Sistem Normal!',
+    'system_wait': 'Menunggu Perangkat...',
     'battery_at': 'Baterai di',
     'solar': 'Surya',
     'vital_facilities': 'Fasilitas Vital',
@@ -90,6 +95,18 @@ const Map<String, Map<String, String>> translations = {
     'auto_cutoff_deact': 'Auto-Cutoff Dinonaktifkan',
     'priority_act': 'Prioritas Diaktifkan',
     'priority_deact': 'Prioritas Dinonaktifkan',
+    'night_mode': 'Mode Hemat Malam Hari',
+    'night_mode_sub': 'AI matikan beban saat surya mati',
+    'night_mode_act': 'Mode Malam Diaktifkan',
+    'night_mode_deact': 'Mode Malam Dinonaktifkan',
+    'surge_protect': 'Perlindungan Lonjakan Beban',
+    'surge_protect_sub': 'AI potong beban jika >2500W',
+    'surge_protect_act': 'Proteksi Beban Aktif',
+    'surge_protect_deact': 'Proteksi Beban Nonaktif',
+    'energy_harvest': 'Panen Energi Otomatis',
+    'energy_harvest_sub': 'AI hidupkan beban saat daya surplus',
+    'energy_harvest_act': 'Panen Energi Aktif',
+    'energy_harvest_deact': 'Panen Energi Nonaktif',
     'notif_perm': 'Izin Notifikasi',
     'notif_perm_desc': 'NUSA POWER ingin mengirimkan peringatan sistem.',
     'deny': 'Tolak',
@@ -133,10 +150,14 @@ const Map<String, Map<String, String>> translations = {
     'ai_engine': 'AI Engine',
     'profile': 'Profile',
     'good_morning': 'Good Morning',
+    'good_afternoon': 'Good Afternoon',
+    'good_evening': 'Good Evening',
+    'good_night': 'Good Night',
     'search': 'Search...',
     'smart_relays': 'Smart Relays',
     'view_all': 'view all',
     'system_ok': 'System OK!',
+    'system_wait': 'Waiting for Device...',
     'battery_at': 'Battery at',
     'solar': 'Solar',
     'vital_facilities': 'Vital Facilities',
@@ -189,7 +210,19 @@ const Map<String, Map<String, String>> translations = {
     'auto_cutoff_deact': 'Auto-Cutoff Deactivated',
     'priority_act': 'Priority Activated',
     'priority_deact': 'Priority Deactivated',
-    'notif_perm': 'Notifications Permission',
+    'night_mode': 'Night Saving Mode',
+    'night_mode_sub': 'AI cuts load when solar is off',
+    'night_mode_act': 'Night Mode Activated',
+    'night_mode_deact': 'Night Mode Deactivated',
+    'surge_protect': 'Surge Protection',
+    'surge_protect_sub': 'AI cuts load if >2500W',
+    'surge_protect_act': 'Surge Protection Activated',
+    'surge_protect_deact': 'Surge Protection Deactivated',
+    'energy_harvest': 'Auto Energy Harvest',
+    'energy_harvest_sub': 'AI turns on loads when surplus',
+    'energy_harvest_act': 'Energy Harvest Activated',
+    'energy_harvest_deact': 'Energy Harvest Deactivated',
+    'notif_perm': 'Notification Permission',
     'notif_perm_desc': 'NUSA POWER would like to send you system alerts.',
     'deny': 'Deny',
     'allow': 'Allow',
@@ -343,7 +376,7 @@ class NusaPowerApp extends StatelessWidget {
         ),
       ),
       debugShowCheckedModeBanner: false,
-      home: const LoginScreen(),
+      home: (prefs?.getBool('isLoggedIn') ?? false) ? const DashboardScreen() : const LoginScreen(),
     );
   }
 }
@@ -371,7 +404,7 @@ class _LoginScreenState extends State<LoginScreen> {
       final res = await http.get(Uri.parse('https://backend-ashy-three-94.vercel.app/api/version'));
       if (res.statusCode == 200) {
         final data = json.decode(res.body);
-        if (data['version'] != '1.0.8') { // Local version is 1.0.8
+        if (data['version'] != '1.1.16') { // Local version is 1.0.8
           if (mounted) {
             showDialog(
               context: context,
@@ -479,6 +512,7 @@ class _LoginScreenState extends State<LoginScreen> {
           prefs?.setString('profileName', data['full_name']);
           prefs?.setString('password', _passwordController.text);
           prefs?.setString('username', data['username']);
+          prefs?.setBool('isLoggedIn', true);
           if (mounted) {
             Navigator.pushReplacement(context, MaterialPageRoute(builder: (context) => const DashboardScreen()));
           }
@@ -653,7 +687,7 @@ class _DashboardScreenState extends State<DashboardScreen> {
       final res = await http.get(Uri.parse('https://backend-ashy-three-94.vercel.app/api/version'));
       if (res.statusCode == 200) {
         final data = json.decode(res.body);
-        if (data['version'] != '1.0.8') {
+        if (data['version'] != '1.1.16') {
           if (mounted) {
             showDialog(
               context: context,
@@ -872,7 +906,7 @@ class _DashboardScreenState extends State<DashboardScreen> {
             children: [
               HomeTab(),
               AnalisisTab(),
-              AIEngineTab(),
+              AIEngineTab(isAiModeEnabled: _isAiModeEnabled),
               ProfilTab(),
             ],
           ),
@@ -927,26 +961,70 @@ class HomeTab extends StatefulWidget {
 }
 
 class _HomeTabState extends State<HomeTab> {
+  String _systemStatus = 'Sistem Normal!';
+  final FlutterTts flutterTts = FlutterTts();
+  bool _isTtsSpeaking = false;
   double batterySoc = 0.0;
   double solarPower = 0.0;
   double totalLoad = 0.0;
   List<dynamic> relays = [];
   bool isLoading = true;
   Timer? _timer;
+  Timer? _clockTimer;
+  DateTime _currentTime = DateTime.now();
   String searchQuery = "";
   Set<int> _pendingRelays = {};
 
   @override
   void initState() {
     super.initState();
+    _initTts();
     fetchData();
     _timer = Timer.periodic(const Duration(seconds: 3), (timer) => fetchData());
+    _clockTimer = Timer.periodic(const Duration(seconds: 1), (timer) {
+      if (mounted) setState(() { _currentTime = DateTime.now(); });
+    });
   }
 
 
+
+  Future<void> _initTts() async {
+    await flutterTts.setLanguage("id-ID");
+    await flutterTts.setSpeechRate(0.5);
+    await flutterTts.setVolume(1.0);
+    await flutterTts.setPitch(1.0);
+  }
+
+  Future<void> _speak(String text) async {
+    if (_isTtsSpeaking) return;
+    _isTtsSpeaking = true;
+    try {
+      await flutterTts.speak(text);
+    } finally {
+      Future.delayed(const Duration(seconds: 4), () {
+        _isTtsSpeaking = false;
+      });
+    }
+  }
+
   void dispose() {
     _timer?.cancel();
+    _clockTimer?.cancel();
     super.dispose();
+  }
+
+  String _getGreeting() {
+    final hour = _currentTime.hour;
+    if (hour >= 5 && hour < 12) return getLang('good_morning');
+    if (hour >= 12 && hour < 15) return getLang('good_afternoon');
+    if (hour >= 15 && hour < 18) return getLang('good_evening');
+    return getLang('good_night');
+  }
+
+  String _getFormattedTime() {
+    final h = _currentTime.hour.toString().padLeft(2, '0');
+    final m = _currentTime.minute.toString().padLeft(2, '0');
+    return "$h:$m";
   }
 
   Future<void> fetchData() async {
@@ -962,6 +1040,19 @@ class _HomeTabState extends State<HomeTab> {
           batterySoc = (tData['batterySoc'] ?? 0.0).toDouble();
           solarPower = (tData['solarPower'] ?? 0.0).toDouble();
           totalLoad = (tData['totalLoad'] ?? 0.0).toDouble();
+          
+          String newStatus = tData['systemStatus'] ?? 'Sistem Normal!';
+          if (newStatus != _systemStatus) {
+            _systemStatus = newStatus;
+            if (_systemStatus == 'Cuaca Buruk Aktif!') {
+               _speak("Cuaca sedang buruk, mode hemat cuaca dinyalakan");
+            } else if (_systemStatus == 'Sistem Normal!') {
+               _speak("Cuaca kembali normal, mode hemat dimatikan");
+            } else if (_systemStatus == 'Baterai Kritis!') {
+               _speak("Peringatan, baterai kritis, sistem beralih ke mode darurat");
+            }
+          }
+
           
           // Only update relays that are NOT currently being toggled locally
           for (var serverRelay in rData) {
@@ -1000,7 +1091,7 @@ class _HomeTabState extends State<HomeTab> {
     try {
       final res = await http.post(Uri.parse('https://backend-ashy-three-94.vercel.app/api/relays/$relayId/toggle')).timeout(const Duration(seconds: 5));
       if (res.statusCode == 200) {
-        NotificationService.showInAppNotification(context, getLang('relay_update'), getLang('relay_toggled'));
+        // Success without showing spammy notification
       } else {
         // Revert on fail
         setState(() {
@@ -1114,7 +1205,18 @@ class _HomeTabState extends State<HomeTab> {
                               return Text('${getLang('hi')} $name!', style: const TextStyle(fontSize: 28, fontWeight: FontWeight.bold, color: Colors.white));
                             },
                           ),
-                          Text(getLang('good_morning'), style: const TextStyle(color: Colors.white70, fontSize: 16)),
+                          const SizedBox(height: 4),
+                          Text(_getGreeting(), style: const TextStyle(color: Colors.white70, fontSize: 16)),
+                          const SizedBox(height: 12),
+                          Row(
+                            crossAxisAlignment: CrossAxisAlignment.baseline,
+                            textBaseline: TextBaseline.alphabetic,
+                            children: [
+                              Text(_getFormattedTime(), style: const TextStyle(fontSize: 56, fontWeight: FontWeight.w300, color: Colors.white, letterSpacing: 2)),
+                              const SizedBox(width: 8),
+                              Text(_currentTime.hour >= 12 ? 'PM' : 'AM', style: const TextStyle(fontSize: 22, fontWeight: FontWeight.bold, color: Colors.white70)),
+                            ],
+                          ),
                         ],
                       ),
                       Container(
@@ -1174,7 +1276,30 @@ class _HomeTabState extends State<HomeTab> {
                     mainAxisAlignment: MainAxisAlignment.spaceBetween,
                     children: [
                       Text(getLang('smart_relays'), style: const TextStyle(fontSize: 18, fontWeight: FontWeight.bold)),
-                      Text(getLang('view_all'), style: TextStyle(color: Colors.grey.shade500, fontSize: 14)),
+                      GestureDetector(
+                        onTap: () {
+                          showModalBottomSheet(
+                            context: context,
+                            builder: (ctx) => Container(
+                              padding: const EdgeInsets.all(24),
+                              decoration: const BoxDecoration(color: Colors.white, borderRadius: BorderRadius.vertical(top: Radius.circular(32))),
+                              child: Column(
+                                mainAxisSize: MainAxisSize.min,
+                                children: [
+                                  Text(getLang('smart_relays'), style: const TextStyle(fontSize: 20, fontWeight: FontWeight.bold)),
+                                  const SizedBox(height: 16),
+                                  ...relays.map((r) => ListTile(
+                                    leading: Icon(_getIconForRelay(r['id']), color: (r['state'] == true) ? Colors.blue : Colors.grey),
+                                    title: Text(getRelayName(r['name'] ?? '')),
+                                    trailing: Text((r['state'] == true) ? getLang('active') : getLang('standby'), style: TextStyle(color: (r['state'] == true) ? Colors.blue : Colors.grey, fontWeight: FontWeight.bold)),
+                                  )).toList()
+                                ],
+                              )
+                            )
+                          );
+                        },
+                        child: Text(getLang('view_all'), style: TextStyle(color: Colors.blue.shade600, fontSize: 14, fontWeight: FontWeight.bold)),
+                      ),
                     ],
                   ),
                   const SizedBox(height: 16),
@@ -1206,7 +1331,7 @@ class _HomeTabState extends State<HomeTab> {
           Column(
             crossAxisAlignment: CrossAxisAlignment.start,
             children: [
-              Text(getLang('system_ok'), style: const TextStyle(fontSize: 20, fontWeight: FontWeight.bold, color: Color(0xFF0F2E59))),
+              Text(batterySoc == 0.0 && solarPower == 0.0 ? getLang('system_wait') : _systemStatus, style: TextStyle(fontSize: 20, fontWeight: FontWeight.bold, color: batterySoc == 0.0 && solarPower == 0.0 ? Colors.orange : (_systemStatus == 'Sistem Normal!' ? const Color(0xFF0F2E59) : Colors.red))),
               const SizedBox(height: 8),
               Text('${getLang('battery_at')} ${batterySoc.toInt()}%', style: const TextStyle(fontSize: 14, color: Colors.grey)),
               Text('${getLang('solar')} ${solarPower}kW', style: const TextStyle(fontSize: 14, color: Colors.grey)),
@@ -1243,6 +1368,8 @@ class _HomeTabState extends State<HomeTab> {
         final bool isOn = relay["state"];
         final int rId = relay["id"];
         final String displayName = getRelayName(relay["name"]);
+        final scheduleTime = relay["schedule_time"] as String?;
+        final int rPriority = relay["priority"] ?? 5;
         
         return BouncingWrapper(
           onTap: () => toggleRelay(rId),
@@ -1263,16 +1390,21 @@ class _HomeTabState extends State<HomeTab> {
               children: [
                 Row(
                   mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                  crossAxisAlignment: CrossAxisAlignment.start,
                   children: [
                     Icon(_getIconForRelay(rId), color: isOn ? Colors.white : const Color(0xFF0F2E59), size: 32),
                     GestureDetector(
                       onTap: () {
-                        _showRelayOptions(context, rId, displayName, isOn);
+                        _showRelayOptions(context, rId, displayName, isOn, scheduleTime, rPriority);
                       },
+                      behavior: HitTestBehavior.opaque,
                       child: Container(
-                        padding: const EdgeInsets.all(4),
-                        color: Colors.transparent,
-                        child: Icon(Icons.more_vert, color: isOn ? Colors.white : Colors.grey),
+                        padding: const EdgeInsets.all(8),
+                        decoration: BoxDecoration(
+                          color: isOn ? Colors.white.withOpacity(0.15) : Colors.grey.withOpacity(0.1),
+                          shape: BoxShape.circle,
+                        ),
+                        child: Icon(Icons.settings_outlined, color: isOn ? Colors.white : Colors.grey.shade600, size: 20),
                       ),
                     ),
                   ],
@@ -1289,11 +1421,33 @@ class _HomeTabState extends State<HomeTab> {
                       borderRadius: BorderRadius.circular(4),
                       minHeight: 4,
                     ),
-                    const SizedBox(height: 8),
-                    Text(isOn ? getLang('active') : getLang('standby'), style: TextStyle(color: isOn ? Colors.white70 : Colors.grey, fontSize: 12, fontWeight: FontWeight.w600)),
+                    const SizedBox(height: 6),
+                    Row(
+                      mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                      children: [
+                        Text(isOn ? getLang('active') : getLang('standby'), style: TextStyle(color: isOn ? Colors.white70 : Colors.grey.shade500, fontSize: 13, fontWeight: FontWeight.w600)),
+                        SizedBox(
+                          height: 30,
+                          child: Transform.scale(
+                            scale: 0.65,
+                            child: Switch(
+                              value: isOn,
+                              onChanged: (val) {
+                                  toggleRelay(rId);
+                              },
+                              activeColor: Colors.white,
+                              activeTrackColor: Colors.blue.shade300,
+                              inactiveThumbColor: Colors.grey.shade400,
+                              inactiveTrackColor: Colors.grey.shade200,
+                            ),
+                          ),
+                        ),
+                      ],
+                    ),
                   ],
                 )
               ],
+
             ),
           ),
         );
@@ -1301,7 +1455,7 @@ class _HomeTabState extends State<HomeTab> {
     );
   }
 
-  void _showRelayOptions(BuildContext context, int relayId, String relayName, bool isOn) {
+  void _showRelayOptions(BuildContext context, int relayId, String relayName, bool isOn, String? scheduleTime, int relayPriority) {
     showModalBottomSheet(
       context: context,
       backgroundColor: Colors.transparent,
@@ -1325,7 +1479,7 @@ class _HomeTabState extends State<HomeTab> {
             const SizedBox(height: 24),
             _buildOptionItem(ctx, Icons.timer, getLang('schedule_timer'), () {
               Navigator.pop(ctx);
-              _showScheduleDialog(context, relayId, relayName);
+              _showScheduleDialog(context, relayId, relayName, scheduleTime);
             }),
             const SizedBox(height: 16),
             _buildOptionItem(ctx, Icons.analytics_outlined, getLang('energy_usage'), () {
@@ -1335,7 +1489,7 @@ class _HomeTabState extends State<HomeTab> {
             const SizedBox(height: 16),
             _buildOptionItem(ctx, Icons.settings, getLang('relay_settings'), () {
               Navigator.pop(ctx);
-              _showSettingsDialog(context, relayId, relayName);
+              _showSettingsDialog(context, relayId, relayName, relayPriority);
             }),
           ],
         ),
@@ -1367,9 +1521,21 @@ class _HomeTabState extends State<HomeTab> {
     );
   }
 
-  void _showScheduleDialog(BuildContext context, int relayId, String relayName) {
+  void _showScheduleDialog(BuildContext context, int relayId, String relayName, String? scheduleTime) {
     TimeOfDay _startTime = const TimeOfDay(hour: 18, minute: 0);
     TimeOfDay _endTime = const TimeOfDay(hour: 6, minute: 0);
+    
+    if (scheduleTime != null && scheduleTime.contains('-')) {
+      try {
+        final parts = scheduleTime.split('-');
+        final startParts = parts[0].split(':');
+        final endParts = parts[1].split(':');
+        _startTime = TimeOfDay(hour: int.parse(startParts[0]), minute: int.parse(startParts[1]));
+        _endTime = TimeOfDay(hour: int.parse(endParts[0]), minute: int.parse(endParts[1]));
+      } catch (e) {
+        // Fallback
+      }
+    }
     
     showDialog(context: context, builder: (ctx) {
       return StatefulBuilder(
@@ -1424,9 +1590,9 @@ class _HomeTabState extends State<HomeTab> {
     });
   }
 
-  void _showSettingsDialog(BuildContext context, int relayId, String relayName) {
+  void _showSettingsDialog(BuildContext context, int relayId, String relayName, int currentPriority) {
     final _nameCtrl = TextEditingController(text: relayName);
-    int _priority = 5;
+    int _priority = currentPriority;
 
     showDialog(context: context, builder: (ctx) {
       return StatefulBuilder(
@@ -1690,7 +1856,8 @@ class AnalisisTab extends StatelessWidget {
 // AI ENGINE TAB
 // ----------------------------------------------------------------------
 class AIEngineTab extends StatefulWidget {
-  const AIEngineTab({super.key});
+  final bool isAiModeEnabled;
+  const AIEngineTab({super.key, required this.isAiModeEnabled});
 
   @override
   State<AIEngineTab> createState() => _AIEngineTabState();
@@ -1699,6 +1866,69 @@ class AIEngineTab extends StatefulWidget {
 class _AIEngineTabState extends State<AIEngineTab> {
   bool autoCutoff = true;
   bool priorityActive = true;
+  bool nightModeActive = true;
+  bool surgeProtectActive = true;
+  bool energyHarvestActive = true;
+  bool _isLoadingSettings = true;
+
+  @override
+  void initState() {
+    super.initState();
+    _fetchSettings();
+  }
+
+  Future<void> _fetchSettings() async {
+    try {
+      final res = await http.get(Uri.parse('https://backend-ashy-three-94.vercel.app/api/ai/settings'));
+      if (res.statusCode == 200) {
+        final data = json.decode(res.body);
+        setState(() {
+          autoCutoff = data['ai_autoCutoff'] ?? true;
+          priorityActive = data['ai_priorityActive'] ?? true;
+          nightModeActive = data['ai_nightModeActive'] ?? true;
+          surgeProtectActive = data['ai_surgeProtectActive'] ?? true;
+          energyHarvestActive = data['ai_energyHarvestActive'] ?? true;
+          _isLoadingSettings = false;
+        });
+      }
+    } catch (e) {
+      setState(() => _isLoadingSettings = false);
+    }
+  }
+
+  Future<void> _updateSettings() async {
+    try {
+      await http.post(
+        Uri.parse('https://backend-ashy-three-94.vercel.app/api/ai/settings'),
+        headers: {'Content-Type': 'application/json'},
+        body: json.encode({
+          'ai_autoCutoff': autoCutoff,
+          'ai_priorityActive': priorityActive,
+          'ai_nightModeActive': nightModeActive,
+          'ai_surgeProtectActive': surgeProtectActive,
+          'ai_energyHarvestActive': energyHarvestActive,
+        })
+      );
+    } catch (e) {}
+  }
+
+  @override
+  void didUpdateWidget(AIEngineTab oldWidget) {
+    super.didUpdateWidget(oldWidget);
+    if (widget.isAiModeEnabled != oldWidget.isAiModeEnabled) {
+      // If AI mode toggled entirely, you could decide to do something here,
+      // but typically we let individual settings remain as they are.
+      // Or we can toggle them all on/off based on the main switch:
+      setState(() {
+        autoCutoff = widget.isAiModeEnabled;
+        priorityActive = widget.isAiModeEnabled;
+        nightModeActive = widget.isAiModeEnabled;
+        surgeProtectActive = widget.isAiModeEnabled;
+        energyHarvestActive = widget.isAiModeEnabled;
+      });
+      _updateSettings();
+    }
+  }
 
   @override
   Widget build(BuildContext context) {
@@ -1729,8 +1959,8 @@ class _AIEngineTabState extends State<AIEngineTab> {
                     const SizedBox(height: 8),
                     Container(
                       padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
-                      decoration: BoxDecoration(color: Colors.white24, borderRadius: BorderRadius.circular(20)),
-                      child: Text(getLang('status_active'), style: const TextStyle(color: Colors.white, fontSize: 14, fontWeight: FontWeight.w600)),
+                      decoration: BoxDecoration(color: widget.isAiModeEnabled ? Colors.white24 : Colors.red.withOpacity(0.8), borderRadius: BorderRadius.circular(20)),
+                      child: Text(widget.isAiModeEnabled ? getLang('status_active') : (appLanguage.value == 'id' ? 'Status: Nonaktif' : 'Status: Inactive'), style: const TextStyle(color: Colors.white, fontSize: 14, fontWeight: FontWeight.w600)),
                     )
                   ],
                 ),
@@ -1757,8 +1987,7 @@ class _AIEngineTabState extends State<AIEngineTab> {
                           title: Text(getLang('auto_cutoff'), style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 16)),
                           subtitle: Text(getLang('auto_cutoff_sub'), style: const TextStyle(fontSize: 12, color: Colors.grey)),
                           value: autoCutoff,
-                          onChanged: (val) {
-                            setState(() => autoCutoff = val);
+                          onChanged: (val) { setState(() { autoCutoff = val; }); _updateSettings();
                             NotificationService.showInAppNotification(context, getLang('ai_engine'), val ? getLang('auto_cutoff_act') : getLang('auto_cutoff_deact'));
                           },
                           activeColor: const Color(0xFF0F2E59),
@@ -1769,9 +1998,41 @@ class _AIEngineTabState extends State<AIEngineTab> {
                           title: Text(getLang('vital_priority'), style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 16)),
                           subtitle: Text(getLang('vital_priority_sub'), style: const TextStyle(fontSize: 12, color: Colors.grey)),
                           value: priorityActive,
-                          onChanged: (val) {
-                            setState(() => priorityActive = val);
+                          onChanged: (val) { setState(() { priorityActive = val; }); _updateSettings();
                             NotificationService.showInAppNotification(context, getLang('ai_engine'), val ? getLang('priority_act') : getLang('priority_deact'));
+                          },
+                          activeColor: const Color(0xFF0F2E59),
+                        ),
+                        Divider(height: 1, color: Colors.grey.shade100, indent: 24, endIndent: 24),
+                        SwitchListTile(
+                          contentPadding: const EdgeInsets.symmetric(horizontal: 24, vertical: 8),
+                          title: Text(getLang('night_mode'), style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 16)),
+                          subtitle: Text(getLang('night_mode_sub'), style: const TextStyle(fontSize: 12, color: Colors.grey)),
+                          value: nightModeActive,
+                          onChanged: (val) { setState(() { nightModeActive = val; }); _updateSettings();
+                            NotificationService.showInAppNotification(context, getLang('ai_engine'), val ? getLang('night_mode_act') : getLang('night_mode_deact'));
+                          },
+                          activeColor: const Color(0xFF0F2E59),
+                        ),
+                        Divider(height: 1, color: Colors.grey.shade100, indent: 24, endIndent: 24),
+                        SwitchListTile(
+                          contentPadding: const EdgeInsets.symmetric(horizontal: 24, vertical: 8),
+                          title: Text(getLang('surge_protect'), style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 16)),
+                          subtitle: Text(getLang('surge_protect_sub'), style: const TextStyle(fontSize: 12, color: Colors.grey)),
+                          value: surgeProtectActive,
+                          onChanged: (val) { setState(() { surgeProtectActive = val; }); _updateSettings();
+                            NotificationService.showInAppNotification(context, getLang('ai_engine'), val ? getLang('surge_protect_act') : getLang('surge_protect_deact'));
+                          },
+                          activeColor: const Color(0xFF0F2E59),
+                        ),
+                        Divider(height: 1, color: Colors.grey.shade100, indent: 24, endIndent: 24),
+                        SwitchListTile(
+                          contentPadding: const EdgeInsets.symmetric(horizontal: 24, vertical: 8),
+                          title: Text(getLang('energy_harvest'), style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 16)),
+                          subtitle: Text(getLang('energy_harvest_sub'), style: const TextStyle(fontSize: 12, color: Colors.grey)),
+                          value: energyHarvestActive,
+                          onChanged: (val) { setState(() { energyHarvestActive = val; }); _updateSettings();
+                            NotificationService.showInAppNotification(context, getLang('ai_engine'), val ? getLang('energy_harvest_act') : getLang('energy_harvest_deact'));
                           },
                           activeColor: const Color(0xFF0F2E59),
                         ),
@@ -1868,7 +2129,10 @@ class ProfilTab extends StatelessWidget {
                   
                   const SizedBox(height: 40),
                   BouncingWrapper(
-                    onTap: () => Navigator.pushReplacement(context, MaterialPageRoute(builder: (_) => const LoginScreen())),
+                    onTap: () {
+                      prefs?.setBool('isLoggedIn', false);
+                      Navigator.pushReplacement(context, MaterialPageRoute(builder: (_) => const LoginScreen()));
+                    },
                     child: Container(
                       width: double.infinity,
                       height: 56,
@@ -2280,6 +2544,7 @@ class _BouncingWrapperState extends State<BouncingWrapper> with SingleTickerProv
   }
 
   @override
+
   void dispose() {
     _controller.dispose();
     super.dispose();
